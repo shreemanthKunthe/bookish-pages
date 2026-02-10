@@ -10,15 +10,6 @@ interface BookViewerProps {
   onClose: () => void;
 }
 
-const PageCover = forwardRef<HTMLDivElement, { children: React.ReactNode }>(
-  ({ children }, ref) => (
-    <div ref={ref} className="page-texture flex items-center justify-center h-full">
-      {children}
-    </div>
-  )
-);
-PageCover.displayName = "PageCover";
-
 const Page = forwardRef<HTMLDivElement, { src: string; pageNum: number }>(
   ({ src, pageNum }, ref) => (
     <div ref={ref} className="page-texture h-full w-full relative overflow-hidden">
@@ -29,7 +20,8 @@ const Page = forwardRef<HTMLDivElement, { src: string; pageNum: number }>(
         draggable={false}
       />
       <div className="spine-gradient absolute inset-0 pointer-events-none" />
-      <span className="absolute bottom-3 left-1/2 -translate-x-1/2 text-xs font-sans opacity-40"
+      <span
+        className="absolute bottom-3 left-1/2 -translate-x-1/2 text-xs font-sans opacity-40"
         style={{ color: "hsl(24, 10%, 30%)" }}
       >
         {pageNum}
@@ -53,6 +45,7 @@ const BookViewer = ({ pdf, onClose }: BookViewerProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const totalPages = pdf.numPages;
 
+  // Load ALL pages first, then render the book once
   useEffect(() => {
     let cancelled = false;
     const loadPages = async () => {
@@ -62,10 +55,6 @@ const BookViewer = ({ pdf, onClose }: BookViewerProps) => {
         if (cancelled) return;
         const dataUrl = await renderPageToDataURL(pdf, i, BOOK_WIDTH, BOOK_HEIGHT);
         rendered.push(dataUrl);
-        // Show pages as they load
-        if (i <= 4 || i === totalPages) {
-          setPages([...rendered]);
-        }
       }
       if (!cancelled) {
         setPages(rendered);
@@ -73,7 +62,9 @@ const BookViewer = ({ pdf, onClose }: BookViewerProps) => {
       }
     };
     loadPages();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pdf, totalPages]);
 
   const flipNext = useCallback(() => {
@@ -127,13 +118,10 @@ const BookViewer = ({ pdf, onClose }: BookViewerProps) => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [flipNext, flipPrev, isFullscreen, onClose]);
 
-  const wrapperClass = isFullscreen
-    ? "fullscreen-reader"
-    : "flex flex-col items-center justify-center min-h-screen py-8";
-
-  if (pages.length < 2) {
+  // Show loader until all pages ready
+  if (loading || pages.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background gap-4">
         <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center animate-pulse-glow">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
@@ -143,12 +131,19 @@ const BookViewer = ({ pdf, onClose }: BookViewerProps) => {
   }
 
   return (
-    <div className={wrapperClass} ref={containerRef}>
+    <div
+      className={
+        isFullscreen
+          ? "fullscreen-reader"
+          : "fixed inset-0 z-50 flex flex-col items-center justify-center bg-background overflow-hidden"
+      }
+      ref={containerRef}
+    >
       <div
         className="relative transition-transform duration-300 ease-out"
         style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
       >
-        <div className="book-shadow rounded-sm">
+        <div className="book-shadow rounded-sm overflow-hidden">
           {/* @ts-ignore - react-pageflip types are incomplete */}
           <HTMLFlipBook
             ref={flipBookRef}

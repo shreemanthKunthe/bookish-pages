@@ -1,20 +1,46 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { loadPdf } from "@/lib/pdf-renderer";
+import { loadPdf, renderPageToDataURL } from "@/lib/pdf-renderer";
+import { getBookshelf, saveBookToShelf, generateBookId, type BookRecord } from "@/lib/bookshelf";
 import UploadZone from "@/components/UploadZone";
 import BookViewer from "@/components/BookViewer";
+import Bookshelf from "@/components/Bookshelf";
 import { BookOpen } from "lucide-react";
 
 const Index = () => {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [books, setBooks] = useState<BookRecord[]>([]);
+
+  const refreshShelf = useCallback(() => {
+    setBooks(getBookshelf());
+  }, []);
+
+  useEffect(() => {
+    refreshShelf();
+  }, [refreshShelf]);
 
   const handleFileSelect = async (file: File) => {
     setError(null);
     setIsLoading(true);
     try {
       const doc = await loadPdf(file);
+      // Save to bookshelf
+      const id = generateBookId(file.name, doc.numPages);
+      let coverDataUrl: string | null = null;
+      try {
+        coverDataUrl = await renderPageToDataURL(doc, 1, 120, 160);
+      } catch {}
+      saveBookToShelf({
+        id,
+        name: file.name.replace(/\.pdf$/i, ""),
+        pageCount: doc.numPages,
+        lastPage: 0,
+        lastOpened: Date.now(),
+        coverDataUrl,
+      });
+      refreshShelf();
       setPdf(doc);
     } catch (e) {
       setError("Failed to load PDF. Please try another file.");
@@ -26,6 +52,7 @@ const Index = () => {
 
   const handleClose = () => {
     setPdf(null);
+    refreshShelf();
   };
 
   if (pdf) {
@@ -59,6 +86,8 @@ const Index = () => {
         {error && (
           <p className="text-center mt-4 text-destructive text-sm">{error}</p>
         )}
+
+        <Bookshelf books={books} onRefresh={refreshShelf} />
 
         <div className="mt-10 text-center">
           <div className="flex items-center justify-center gap-6 text-xs text-muted-foreground">
